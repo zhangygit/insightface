@@ -1,18 +1,18 @@
+lr_mult = 1
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0005)
 optimizer_config = dict(grad_clip=None)
-lr_mult = 8
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=1500,
+    warmup_iters=1000,
     warmup_ratio=0.001,
-    step=[55*lr_mult, 68*lr_mult])
-total_epochs = 80*lr_mult
-checkpoint_config = dict(interval=80)
-log_config = dict(interval=100, hooks=[dict(type='TextLoggerHook')])
+    step=[90, 110])
+total_epochs = 120
+checkpoint_config = dict(interval=10)
+log_config = dict(interval=10, hooks=[dict(type='TextLoggerHook')])
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-load_from = None
+load_from = 'pretrained/model.pth'
 resume_from = None
 workflow = [('train', 1)]
 dataset_type = 'RetinaFaceDataset'
@@ -26,7 +26,7 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True, with_keypoints=True),
     dict(
         type='RandomSquareCrop',
-        crop_choice=[0.3, 0.45, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0],
+        crop_choice=[0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
         bbox_clip_border=False),
     dict(
         type='Resize',
@@ -36,10 +36,10 @@ train_pipeline = [
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(
         type='PhotoMetricDistortion',
-        brightness_delta=32,
-        contrast_range=(0.5, 1.5),
-        saturation_range=(0.5, 1.5),
-        hue_delta=18),
+        brightness_delta=24,
+        contrast_range=(0.7, 1.3),
+        saturation_range=(0.7, 1.3),
+        hue_delta=9),
     dict(
         type='Normalize',
         mean=[127.5, 127.5, 127.5],
@@ -73,8 +73,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=8,
-    workers_per_gpu=3,
+    samples_per_gpu=64,
+    workers_per_gpu=8,
     train=dict(
         type='RetinaFaceDataset',
         ann_file='data/retinaface/train/labelv2.txt',
@@ -84,9 +84,7 @@ data = dict(
             dict(type='LoadAnnotations', with_bbox=True, with_keypoints=True),
             dict(
                 type='RandomSquareCrop',
-                crop_choice=[
-                    0.3, 0.45, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0
-                ],
+                crop_choice=[0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
                 bbox_clip_border=False),
             dict(
                 type='Resize',
@@ -96,10 +94,10 @@ data = dict(
             dict(type='RandomFlip', flip_ratio=0.5),
             dict(
                 type='PhotoMetricDistortion',
-                brightness_delta=32,
-                contrast_range=(0.5, 1.5),
-                saturation_range=(0.5, 1.5),
-                hue_delta=18),
+                brightness_delta=24,
+                contrast_range=(0.7, 1.3),
+                saturation_range=(0.7, 1.3),
+                hue_delta=9),
             dict(
                 type='Normalize',
                 mean=[127.5, 127.5, 127.5],
@@ -188,15 +186,14 @@ model = dict(
         stacked_convs=3,
         feat_channels=80,
         norm_cfg=dict(type='BN', requires_grad=True),
-        #norm_cfg=dict(type='GN', num_groups=16, requires_grad=True),
         cls_reg_share=True,
         strides_share=False,
         scale_mode=2,
         anchor_generator=dict(
             type='AnchorGenerator',
             ratios=[1.0],
-            scales = [1,2],
-            base_sizes = [16, 64, 256],
+            scales=[1, 2],
+            base_sizes=[32, 128, 512],
             strides=[8, 16, 32]),
         loss_cls=dict(
             type='QualityFocalLoss',
@@ -207,8 +204,7 @@ model = dict(
         reg_max=8,
         loss_bbox=dict(type='DIoULoss', loss_weight=2.0),
         use_kps=True,
-        loss_kps=dict(
-            type='SmoothL1Loss', beta=0.1111111111111111, loss_weight=0.1),
+        loss_kps=dict(type='SmoothL1Loss', beta=1.0, loss_weight=0.1),
         train_cfg=dict(
             assigner=dict(type='ATSSAssigner', topk=9),
             allowed_border=-1,
@@ -232,4 +228,5 @@ test_cfg = dict(
     nms=dict(type='nms', iou_threshold=0.45),
     max_per_img=-1)
 epoch_multi = 1
-evaluation = dict(interval=80, metric='mAP')
+evaluation = dict(interval=10, metric='mAP')
+

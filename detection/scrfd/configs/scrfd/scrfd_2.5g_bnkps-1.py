@@ -12,7 +12,7 @@ checkpoint_config = dict(interval=10)
 log_config = dict(interval=10, hooks=[dict(type='TextLoggerHook')])
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-load_from = 'pretrained/model-2.5.pth'
+load_from = 'pretrained/model.pth'
 resume_from = None
 workflow = [('train', 1)]
 dataset_type = 'RetinaFaceDataset'
@@ -23,19 +23,17 @@ img_norm_cfg = dict(
     mean=[127.5, 127.5, 127.5], std=[128.0, 128.0, 128.0], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
-    dict(type='LoadAnnotationsV2', with_bbox=True, with_keypoints=True),
+    dict(type='LoadAnnotations', with_bbox=True, with_keypoints=True),
     dict(
         type='RandomSquareCrop',
         crop_choice=[0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
         bbox_clip_border=False),
-    dict(type='RotateV2', level=5, prob=0.3, max_rotate_angle=180, random_negative_prob=0.5),
-    dict(type='RotateV2', level=5, prob=0.3, max_rotate_angle=360, random_negative_prob=0.5),
     dict(
-        type='ResizeV2',
+        type='Resize',
         img_scale=(640, 640),
         keep_ratio=False,
         bbox_clip_border=False),
-    dict(type='RandomFlipV2', flip_ratio=0.5),
+    dict(type='RandomFlip', flip_ratio=0.5),
     dict(
         type='PhotoMetricDistortion',
         brightness_delta=24,
@@ -47,7 +45,7 @@ train_pipeline = [
         mean=[127.5, 127.5, 127.5],
         std=[128.0, 128.0, 128.0],
         to_rgb=True),
-    dict(type='DefaultFormatBundleV2'),
+    dict(type='DefaultFormatBundle'),
     dict(
         type='Collect',
         keys=[
@@ -82,38 +80,36 @@ data = dict(
         ann_file='data/retinaface/train/labelv2.txt',
         img_prefix='data/retinaface/train/images/',
         pipeline=[
-          dict(type='LoadImageFromFile', to_float32=True),
-          dict(type='LoadAnnotationsV2', with_bbox=True, with_keypoints=True),
-          dict(
-              type='RandomSquareCrop',
-              crop_choice=[0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
-              bbox_clip_border=False),
-          dict(type='RotateV2', level=5, prob=0.3, max_rotate_angle=180, random_negative_prob=0.5),
-          dict(type='RotateV2', level=5, prob=0.3, max_rotate_angle=360, random_negative_prob=0.5),
-          dict(
-              type='ResizeV2',
-              img_scale=(640, 640),
-              keep_ratio=False,
-              bbox_clip_border=False),
-          dict(type='RandomFlip', flip_ratio=0.5),
-          dict(
-              type='PhotoMetricDistortion',
-              brightness_delta=24,
-              contrast_range=(0.7, 1.3),
-              saturation_range=(0.7, 1.3),
-              hue_delta=9),
-          dict(
-              type='Normalize',
-              mean=[127.5, 127.5, 127.5],
-              std=[128.0, 128.0, 128.0],
-              to_rgb=True),
-          dict(type='DefaultFormatBundleV2'),
-          dict(
-              type='Collect',
-              keys=[
-                'img', 'gt_bboxes', 'gt_labels', 'gt_bboxes_ignore',
-                'gt_keypointss'
-              ])
+            dict(type='LoadImageFromFile', to_float32=True),
+            dict(type='LoadAnnotations', with_bbox=True, with_keypoints=True),
+            dict(
+                type='RandomSquareCrop',
+                crop_choice=[0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
+                bbox_clip_border=False),
+            dict(
+                type='Resize',
+                img_scale=(640, 640),
+                keep_ratio=False,
+                bbox_clip_border=False),
+            dict(type='RandomFlip', flip_ratio=0.5),
+            dict(
+                type='PhotoMetricDistortion',
+                brightness_delta=24,
+                contrast_range=(0.7, 1.3),
+                saturation_range=(0.7, 1.3),
+                hue_delta=9),
+            dict(
+                type='Normalize',
+                mean=[127.5, 127.5, 127.5],
+                std=[128.0, 128.0, 128.0],
+                to_rgb=True),
+            dict(type='DefaultFormatBundle'),
+            dict(
+                type='Collect',
+                keys=[
+                    'img', 'gt_bboxes', 'gt_labels', 'gt_bboxes_ignore',
+                    'gt_keypointss'
+                ])
         ]),
     val=dict(
         type='RetinaFaceDataset',
@@ -126,8 +122,8 @@ data = dict(
                 img_scale=(640, 640),
                 flip=False,
                 transforms=[
-                  dict(type='ResizeV2', keep_ratio=True),
-                  dict(type='RandomFlip', flip_ratio=0.0),
+                    dict(type='Resize', keep_ratio=True),
+                    dict(type='RandomFlip', flip_ratio=0.0),
                     dict(
                         type='Normalize',
                         mean=[127.5, 127.5, 127.5],
@@ -149,7 +145,7 @@ data = dict(
                 img_scale=(640, 640),
                 flip=False,
                 transforms=[
-                    dict(type='ResizeV2', keep_ratio=True),
+                    dict(type='Resize', keep_ratio=True),
                     dict(type='RandomFlip', flip_ratio=0.0),
                     dict(
                         type='Normalize',
