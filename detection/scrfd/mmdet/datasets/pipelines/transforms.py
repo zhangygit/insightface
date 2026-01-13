@@ -1130,10 +1130,16 @@ class RandomSquareCrop(object):
         `gt_bboxes_ignore` to `gt_labels_ignore` and `gt_masks_ignore`.
     """
 
-    def __init__(self, crop_ratio_range=None, crop_choice=None, bbox_clip_border=True):
+    def __init__(self,
+                 crop_ratio_range=None,
+                 crop_choice=None,
+                 bbox_clip_border=True,
+                 big_face_ratio=0,
+                 big_face_crop_choice=None):
 
         self.crop_ratio_range = crop_ratio_range
         self.crop_choice = crop_choice
+        self.big_face_crop_choice = big_face_crop_choice
         self.bbox_clip_border = bbox_clip_border
 
         assert (self.crop_ratio_range is None) ^ (self.crop_choice is None)
@@ -1148,6 +1154,8 @@ class RandomSquareCrop(object):
             'gt_bboxes': 'gt_masks',
             'gt_bboxes_ignore': 'gt_masks_ignore'
         }
+        assert big_face_ratio >= 0 and big_face_ratio <= 1.0
+        self.big_face_ratio = big_face_ratio
 
     def __call__(self, results):
         """Call function to crop images and bounding boxes with minimum IoU
@@ -1167,57 +1175,96 @@ class RandomSquareCrop(object):
         img = results['img']
         assert 'bbox_fields' in results
         assert 'gt_bboxes' in results
+        # try augment big face images
+        find_bigface = False
+        if np.random.random() < self.big_face_ratio:
+            min_size = 100  # h and w
+            expand_ratio = 0.3  # expand ratio of croped face alongwith both w and h
+            bbox = results['gt_bboxes'].copy()
+            lmks = results['gt_keypointss'].copy()
+            label = results['gt_labels'].copy()
+            # filter small faces
+            size_mask = ((bbox[:, 2] - bbox[:, 0]) > min_size) * (
+                (bbox[:, 3] - bbox[:, 1]) > min_size)
+            bbox = bbox[size_mask]
+            lmks = lmks[size_mask]
+            label = label[size_mask]
+            # randomly choose a face that has no overlap with others
+            if len(bbox) > 0:
+                overlaps = bbox_overlaps(bbox, bbox)
+                overlaps -= np.eye(overlaps.shape[0])
+                iou_mask = np.sum(overlaps, axis=1) == 0
+                bbox = bbox[iou_mask]
+                lmks = lmks[iou_mask]
+                label = label[iou_mask]
+                if len(bbox) > 0:
+                    choice = np.random.randint(len(bbox))
+                    bbox = bbox[choice]
+                    lmks = lmks[choice]
+                    label = [label[choice]]
+                    w = bbox[2] - bbox[0]
+                    h = bbox[3] - bbox[1]
+                    x1 = bbox[0] - w * expand_ratio
+                    x2 = bbox[2] + w * expand_ratio
+                    y1 = bbox[1] - h * expand_ratio
+                    y2 = bbox[3] + h * expand_ratio
+                    x1, x2 = np.clip([x1, x2], 0, img.shape[1])
+                    y1, y2 = np.clip([y1, y2], 0, img.shape[0])
+                    bbox -= np.tile([x1, y1], 2)
+                    lmks -= (x1, y1, 0)
+
+                    find_bigface = True
+                    img = img[int(y1):int(y2), int(x1):int(x2), :]
+                    results['gt_bboxes'] = np.expand_dims(bbox, axis=0)
+                    results['gt_keypointss'] = np.expand_dims(lmks, axis=0)
+                    results['gt_labels'] = np.array(label)
+                    results['img'] = img
+
         boxes = results['gt_bboxes']
-        #boxes = [results[key] for key in results['bbox_fields']]
-        #boxes = np.concatenate(boxes, 0)
         h, w, c = img.shape
-        scale_retry = 0
+
         if self.crop_ratio_range is not None:
             max_scale = self.crop_ratio_max
         else:
             max_scale = np.amax(self.crop_choice)
-        #max_scale = max(max_scale, float(max(w,h))/min(w,h))
-
+        scale_retry = 0
         while True:
             scale_retry += 1
-
-            if scale_retry==1 or max_scale>1.0:
+            if scale_retry == 1 or max_scale > 1.0:
                 if self.crop_ratio_range is not None:
                     scale = np.random.uniform(self.crop_ratio_min,
                                               self.crop_ratio_max)
                 elif self.crop_choice is not None:
                     scale = np.random.choice(self.crop_choice)
             else:
-                #scale = min(scale*1.2, max_scale)
-                scale = scale*1.2
+                scale = scale * 1.2
 
-            # print(scale, img.shape[:2], boxes)
-            # import cv2
-            # cv2.imwrite('aaa.png', img)
+            if find_bigface:
+                # select a scale from big_face_crop_choice if in big_face mode
+                scale = np.random.choice(self.big_face_crop_choice)
 
             for i in range(250):
-                short_side = min(w, h)
-                cw = int(scale * short_side)
+                long_side = max(w, h)
+                cw = int(scale * long_side)
                 ch = cw
 
                 # TODO +1
-                if w==cw:
+                if w == cw:
                     left = 0
-                elif w>cw:
-                    #left = random.uniform(w - cw)
+                elif w > cw:
                     left = random.randint(0, w - cw)
                 else:
                     left = random.randint(w - cw, 0)
-                if h==ch:
+                if h == ch:
                     top = 0
-                elif h>ch:
-                    #top = random.uniform(h - ch)
+                elif h > ch:
                     top = random.randint(0, h - ch)
                 else:
                     top = random.randint(h - ch, 0)
 
                 patch = np.array(
-                    (int(left), int(top), int(left + cw), int(top + ch)), dtype=np.int)
+                    (int(left), int(top), int(left + cw), int(top + ch)),
+                    dtype=np.int32)
 
                 # center of boxes should inside the crop img
                 # only adjust boxes and instance masks when the gt is not empty
@@ -1225,10 +1272,11 @@ class RandomSquareCrop(object):
                 def is_center_of_bboxes_in_patch(boxes, patch):
                     # TODO >=
                     center = (boxes[:, :2] + boxes[:, 2:]) / 2
-                    mask = ((center[:, 0] > patch[0]) *
-                            (center[:, 1] > patch[1]) *
-                            (center[:, 0] < patch[2]) *
-                            (center[:, 1] < patch[3]))
+                    mask = \
+                        ((center[:, 0] > patch[0])
+                         * (center[:, 1] > patch[1])
+                         * (center[:, 0] < patch[2])
+                         * (center[:, 1] < patch[3]))
                     return mask
 
                 mask = is_center_of_bboxes_in_patch(boxes, patch)
@@ -1236,7 +1284,6 @@ class RandomSquareCrop(object):
                     continue
                 for key in results.get('bbox_fields', []):
                     boxes = results[key].copy()
-                    #print('BBB', key, boxes.shape)
                     mask = is_center_of_bboxes_in_patch(boxes, patch)
                     boxes = boxes[mask]
                     if self.bbox_clip_border:
@@ -1251,17 +1298,19 @@ class RandomSquareCrop(object):
                         results[label_key] = results[label_key][mask]
 
                     # keypoints field
-                    if key=='gt_bboxes':
+                    if key == 'gt_bboxes':
                         for kps_key in results.get('keypoints_fields', []):
                             keypointss = results[kps_key].copy()
-                            #print('AAAA', kps_key, keypointss.shape, mask.shape)
-                            keypointss = keypointss[mask,:,:]
+                            keypointss = keypointss[mask, :, :]
                             if self.bbox_clip_border:
-                                keypointss[:,:,:2] = keypointss[:,:,:2].clip(max=patch[2:])
-                                keypointss[:,:,:2] = keypointss[:,:,:2].clip(min=patch[:2])
-                            #keypointss[:,:,:2] -= np.tile(patch[:2], 2)
-                            keypointss[:,:,0] -= patch[0]
-                            keypointss[:,:,1] -= patch[1]
+                                keypointss[:, :, :
+                                           2] = keypointss[:, :, :2].clip(
+                                               max=patch[2:])
+                                keypointss[:, :, :
+                                           2] = keypointss[:, :, :2].clip(
+                                               min=patch[:2])
+                            keypointss[:, :, 0] -= patch[0]
+                            keypointss[:, :, 1] -= patch[1]
                             results[kps_key] = keypointss
 
                     # mask fields
@@ -1271,28 +1320,25 @@ class RandomSquareCrop(object):
                                                               [0]].crop(patch)
 
                 # adjust the img no matter whether the gt is empty before crop
-                #img = img[patch[1]:patch[3], patch[0]:patch[2]]
-                rimg = np.ones( (ch, cw, 3), dtype=img.dtype) * 128
+                rimg = np.ones((ch, cw, 3), dtype=img.dtype) * 128
                 patch_from = patch.copy()
                 patch_from[0] = max(0, patch_from[0])
                 patch_from[1] = max(0, patch_from[1])
                 patch_from[2] = min(img.shape[1], patch_from[2])
                 patch_from[3] = min(img.shape[0], patch_from[3])
                 patch_to = patch.copy()
-                patch_to[0] = max(0, patch_to[0]*-1)
-                patch_to[1] = max(0, patch_to[1]*-1)
+                patch_to[0] = max(0, patch_to[0] * -1)
+                patch_to[1] = max(0, patch_to[1] * -1)
                 patch_to[2] = patch_to[0] + (patch_from[2] - patch_from[0])
                 patch_to[3] = patch_to[1] + (patch_from[3] - patch_from[1])
-                rimg[patch_to[1]:patch_to[3], patch_to[0]:patch_to[2],:] = img[patch_from[1]:patch_from[3], patch_from[0]:patch_from[2], :]
-                #print(img.shape, scale, patch, patch_from, patch_to, rimg.shape)
+                rimg[patch_to[1]:patch_to[3],
+                     patch_to[0]:patch_to[2], :] = img[
+                         patch_from[1]:patch_from[3],
+                         patch_from[0]:patch_from[2], :]
                 img = rimg
                 results['img'] = img
                 results['img_shape'] = img.shape
 
-                # seg fields
-                #for key in results.get('seg_fields', []):
-                #    results[key] = results[key][patch[1]:patch[3],
-                #                                patch[0]:patch[2]]
                 return results
 
     def __repr__(self):
