@@ -19,6 +19,9 @@ config.batch_size = 256
 config.lr = 0.05
 config.verbose = 2000
 config.dali = True
+## 增强对复杂环境下牛脸的识别
+config.dali_aug= True
+config.num_workers = 4
 
 config.rec = "train_tmp/shuffled_ms1m-retinaface-t1"
 config.num_classes = 16
