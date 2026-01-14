@@ -19,7 +19,7 @@ config.batch_size = 256
 config.lr = 0.05
 config.verbose = 2000
 config.dali = True
-## 增强对复杂环境下牛脸的识别
+## 增强对复杂环境下脸的识别
 config.dali_aug= True
 config.num_workers = 4
 
@@ -29,5 +29,5 @@ config.num_image = 48
 config.num_epoch = 40
 config.warmup_epoch = 2
 config.val_targets = []
-# 6. 采样率：如果牛的数量没超过百万级，建议设为 1.0 (不使用 Partial FC 的抽样)
+# 6. 采样率：如果数量没超过百万级，建议设为 1.0 (不使用 Partial FC 的抽样)
 config.sample_rate = 1.0
