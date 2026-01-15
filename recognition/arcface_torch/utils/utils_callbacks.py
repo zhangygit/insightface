@@ -9,6 +9,7 @@ from eval import verification
 from utils.utils_logging import AverageMeter
 from torch.utils.tensorboard import SummaryWriter
 from torch import distributed
+import numpy as np
 
 
 class CallBackVerification(object):
@@ -25,7 +26,7 @@ class CallBackVerification(object):
         self.summary_writer = summary_writer
         self.wandb_logger = wandb_logger
 
-    def ver_test(self, backbone: torch.nn.Module, global_step: int):
+    def ver_test(self, output: str ,backbone: torch.nn.Module, global_step: int):
         results = []
         for i in range(len(self.ver_list)):
             acc1, std1, acc2, std2, xnorm, embeddings_list = verification.test(
@@ -49,6 +50,15 @@ class CallBackVerification(object):
             logging.info(
                 '[%s][%d]Accuracy-Highest: %1.5f' % (self.ver_name_list[i], global_step, self.highest_acc_list[i]))
             results.append(acc2)
+        avg_acc = np.mean(results) # 计算所有验证集的平均分
+        logging.info(f"--- 当前验证集平均分，Step: {global_step}, Avg Acc: {avg_acc:.5f} ,Highest Acc: {self.highest_acc:.5f}---")
+        if avg_acc > self.highest_acc:
+            self.highest_acc = avg_acc
+            if self.rank == 0:
+                # 保存为一个固定的 best_model.pt，每次有更好的就覆盖它
+                best_path = os.path.join(output, f"best-{global_step}.pt")
+                torch.save(backbone.module.state_dict(), best_path)
+                logging.info(f"--- 全局最优模型已更新，Step: {global_step}, Highest Acc: {avg_acc:.5f} ---")
 
     def init_dataset(self, val_targets, data_dir, image_size):
         for name in val_targets:
@@ -58,10 +68,10 @@ class CallBackVerification(object):
                 self.ver_list.append(data_set)
                 self.ver_name_list.append(name)
 
-    def __call__(self, num_update, backbone: torch.nn.Module):
+    def __call__(self, output,num_update, backbone: torch.nn.Module):
         if self.rank is 0 and num_update > 0:
             backbone.eval()
-            self.ver_test(backbone, num_update)
+            self.ver_test(output,backbone, num_update)
             backbone.train()
 
 
