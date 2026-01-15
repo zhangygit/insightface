@@ -225,8 +225,11 @@ def main(args):
             torch.save(checkpoint, os.path.join(cfg.output, f"checkpoint_gpu_{rank}.pt"))
 
         if rank == 0:
-            path_module = os.path.join(cfg.output, "model.pt")
+            path_module = os.path.join(cfg.output, f"model_epoch_{epoch}.pt")
             torch.save(backbone.module.state_dict(), path_module)
+            logging.info(f"保存模型: {path_module}") # 建议加一行日志，确认保存成功
+
+
 
             if wandb_logger and cfg.save_artifacts:
                 artifact_name = f"{run_name}_E{epoch}"
@@ -238,7 +241,7 @@ def main(args):
             train_loader.reset()
 
     if rank == 0:
-        path_module = os.path.join(cfg.output, "model.pt")
+        path_module = os.path.join(cfg.output, "last.pt")
         torch.save(backbone.module.state_dict(), path_module)
         
         if wandb_logger and cfg.save_artifacts:
