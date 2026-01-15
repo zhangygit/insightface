@@ -148,13 +148,21 @@ def calculate_val(thresholds,
             _, far_train[threshold_idx] = calculate_val_far(
                 threshold, dist[train_set], actual_issame[train_set])
         if np.max(far_train) >= far_target:
-            f = interpolate.interp1d(far_train, thresholds, kind='slinear')
-            threshold = f(far_target)
+            # 找到唯一的 far_train 值及其对应的索引
+            _, unique_indices = np.unique(far_train, return_index=True)
+            # 只保留唯一值进行插值
+            f = interpolate.interp1d(far_train[unique_indices], thresholds[unique_indices], kind='slinear', fill_value="extrapolate")
+            threshold = f(far)
         else:
             threshold = 0.0
 
-        val[fold_idx], far[fold_idx] = calculate_val_far(
-            threshold, dist[test_set], actual_issame[test_set])
+        try:
+            val[fold_idx], far[fold_idx] = calculate_val_far(
+                thresholds, dist[test_set], actual_issame[test_set]
+            )
+        except Exception as e:
+            print(f"Validation calculation failed at fold {fold_idx}, skipping VAL/FAR metrics. Error: {e}")
+            val[fold_idx], far[fold_idx] = 0, 0
 
     val_mean = np.mean(val)
     far_mean = np.mean(far)
