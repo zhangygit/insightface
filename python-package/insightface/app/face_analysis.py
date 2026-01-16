@@ -10,18 +10,15 @@ from __future__ import division
 import glob
 import os.path as osp
 
-import numpy as np
 import onnxruntime
-from numpy.linalg import norm
 
 from ..model_zoo import model_zoo
-from ..utils import DEFAULT_MP_NAME, ensure_available_local
 from .common import Face
 
 __all__ = ['FaceAnalysis']
 
 class FaceAnalysis:
-    def __init__(self, name=DEFAULT_MP_NAME, root='~/.insightface', allowed_modules=None, **kwargs):
+    def __init__(self, root='~/.insightface', allowed_modules=None, **kwargs):
         onnxruntime.set_default_logger_severity(3)
         self.models = {}
         self.model_dir = root
