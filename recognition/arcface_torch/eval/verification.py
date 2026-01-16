@@ -26,6 +26,7 @@
 
 import datetime
 import os
+import logging
 import pickle
 
 import mxnet as mx
@@ -67,7 +68,7 @@ def calculate_roc(thresholds,
     fprs = np.zeros((nrof_folds, nrof_thresholds))
     accuracy = np.zeros((nrof_folds))
     indices = np.arange(nrof_pairs)
-
+    best_threshold=0.0
     if pca == 0:
         diff = np.subtract(embeddings1, embeddings2)
         dist = np.sum(np.square(diff), 1)
@@ -97,10 +98,13 @@ def calculate_roc(thresholds,
             tprs[fold_idx, threshold_idx], fprs[fold_idx, threshold_idx], _ = calculate_accuracy(
                 threshold, dist[test_set],
                 actual_issame[test_set])
+        if thresholds[best_threshold_index] > best_threshold:
+            best_threshold = thresholds[best_threshold_index]
         _, _, accuracy[fold_idx] = calculate_accuracy(
             thresholds[best_threshold_index], dist[test_set],
             actual_issame[test_set])
-
+    
+    logging.info(f"Best Threshold for this fold: {best_threshold}")
     tpr = np.mean(tprs, 0)
     fpr = np.mean(fprs, 0)
     return tpr, fpr, accuracy

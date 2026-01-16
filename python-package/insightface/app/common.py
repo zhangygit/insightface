@@ -40,7 +40,11 @@ class Face(dict):
     def normed_embedding(self):
         if self.embedding is None:
             return None
-        return self.embedding / self.embedding_norm
+        denom = self.embedding_norm
+        # 增加一个极小值判断
+        if denom < 1e-6:
+            return self.embedding
+        return self.embedding / denom
 
     @property 
     def sex(self):
