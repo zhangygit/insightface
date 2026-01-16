@@ -95,6 +95,22 @@ def main(args):
     backbone = get_model(
         cfg.network, dropout=0.0, fp16=cfg.fp16, num_features=cfg.embedding_size).cuda()
 
+    if cfg.pretrained:
+        checkpoint = torch.load(cfg.pretrained, map_location="cuda")
+        state_dict = checkpoint if "state_dict" not in checkpoint else checkpoint["state_dict"]
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
+        # 获取当前模型的字典
+        model_dict = backbone.state_dict()
+        # 过滤掉不存在的 key
+        state_dict = {k: v for k, v in state_dict.items() if k in model_dict}
+
+        # 加载并记录
+        msg = backbone.load_state_dict(state_dict, strict=False)
+        logging.info(f"Loaded pretrained weights from {cfg.pretrained}")
+        logging.info(f"Missing keys: {msg.missing_keys}") # 理想情况下应该是空的
+        logging.info(f"Unexpected keys: {msg.unexpected_keys}")
+
     backbone = torch.nn.parallel.DistributedDataParallel(
         module=backbone, broadcast_buffers=False, device_ids=[local_rank], bucket_cap_mb=16,
         find_unused_parameters=True)
