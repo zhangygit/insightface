@@ -24,7 +24,7 @@ class FaceAnalysis:
     def __init__(self, name=DEFAULT_MP_NAME, root='~/.insightface', allowed_modules=None, **kwargs):
         onnxruntime.set_default_logger_severity(3)
         self.models = {}
-        self.model_dir = ensure_available_local('models', name, root=root)
+        self.model_dir = root
         onnx_files = glob.glob(osp.join(self.model_dir, '*.onnx'))
         onnx_files = sorted(onnx_files)
         for onnx_file in onnx_files:
@@ -55,6 +55,13 @@ class FaceAnalysis:
             else:
                 model.prepare(ctx_id)
 
+    def detect(self,img, max_num=0, det_metric='default'):
+        bboxes, _ = self.det_model.detect(img,
+                                             max_num=max_num,
+                                             metric=det_metric)
+        return bboxes.shape[0]
+
+
     def get(self, img, max_num=0, det_metric='default'):
         bboxes, kpss = self.det_model.detect(img,
                                              max_num=max_num,
@@ -81,29 +88,32 @@ class FaceAnalysis:
         dimg = img.copy()
         for i in range(len(faces)):
             face = faces[i]
+            # 1. 获取坐标和置信度
             box = face.bbox.astype(int)
-            color = (0, 0, 255)
-            cv2.rectangle(dimg, (box[0], box[1]), (box[2], box[3]), color, 2)
-            if face.kps is not None:
-                kps = face.kps.astype(int)
-                #print(landmark.shape)
-                for l in range(kps.shape[0]):
-                    color = (0, 0, 255)
-                    if l == 0 or l == 3:
-                        color = (0, 255, 0)
-                    cv2.circle(dimg, (kps[l][0], kps[l][1]), 1, color,
-                               2)
-            if face.gender is not None and face.age is not None:
-                cv2.putText(dimg,'%s,%d'%(face.sex,face.age), (box[0]-1, box[1]-4),cv2.FONT_HERSHEY_COMPLEX,0.7,(0,255,0),1)
+            x1, y1, x2, y2 = box
+            score = face.det_score if hasattr(face, 'det_score') else 0.0
 
-            #for key, value in face.items():
-            #    if key.startswith('landmark_3d'):
-            #        print(key, value.shape)
-            #        print(value[0:10,:])
-            #        lmk = np.round(value).astype(int)
-            #        for l in range(lmk.shape[0]):
-            #            color = (255, 0, 0)
-            #            cv2.circle(dimg, (lmk[l][0], lmk[l][1]), 1, color,
-            #                       2)
+            # 定义颜色 (BGR 格式)
+            theme_color = (0, 255, 0)  # 亮绿色
+            txt_color = (255, 255, 255) # 白色
+
+            cv2.rectangle(dimg, (x1, y1), (x2, y2), theme_color, 3)
+
+            label = f'Conf: {score:.2f}'
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 1
+            (t_w, t_h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+
+            cv2.rectangle(dimg, (x1, y1 - t_h - 10), (x1 + t_w + 5, y1), theme_color, -1)
+            cv2.putText(dimg, label, (x1 + 2, y1 - 5), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+
+            # 4. 绘制 5 点关键点 (画大并使用实心)
+            if hasattr(face, 'kps') and face.kps is not None:
+                for (kx, ky) in face.kps:
+                    # 画一个带黑边的大圆点，增加辨识度
+                    cv2.circle(dimg, (int(kx), int(ky)), 4, (0, 0, 0), -1)      # 黑底
+                    cv2.circle(dimg, (int(kx), int(ky)), 2, (0, 255, 255), -1) # 黄心
+
         return dimg
 
