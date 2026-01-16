@@ -1,0 +1,5 @@
+python-package/build/
+python-package/dist/
+python-package/*.egg-info/
+README.md
+**/*.pyc
